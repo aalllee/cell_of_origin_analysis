@@ -1,0 +1,9 @@
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - python=2.7.15
+  - pysam=0.7.7
+  - bx-python=0.8.9
+  - numpy=1.16.5
+  - samtools

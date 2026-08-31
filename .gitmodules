@@ -1,0 +1,6 @@
+[submodule "cfDNA"]
+	path = cfDNA
+	url = https://github.com/shendurelab/cfDNA
+[submodule "cfDNA_cell_of_origin"]
+	path = cfDNA_cell_of_origin
+	url = https://github.com/JorisVermeeschLab/cfDNA_cell_of_origin.git
