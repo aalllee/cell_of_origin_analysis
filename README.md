@@ -66,18 +66,15 @@ flowchart TD
 ```text
 pipeline/
 ├── workflow/
-│   ├── Snakefile              the 4-rule pipeline
-│   ├── envs/                   conda env specs, one per rule, auto-built by Snakemake
-│   │   ├── cfdna.yaml           Python 2, pysam, bx-python, samtools
-│   │   ├── r.yaml                r-base
-│   │   └── python3.yaml          python 3
+│   ├── Snakefile                main pipeline rules
+│   ├── envs/
+│   │   └── cfdna.yaml           conda env spec, auto-built by Snakemake: Python 2, pysam, bx-python, samtools
 │   ├── scripts/
 │   │   └── collapse_fft_wps.py
 │   └── results/                 pipeline output (gitignored)
 ├── annotation/
 │   ├── transcriptAnno-GRCh38.tsv
 │   └── transcriptAnno_GRCh38.body.tsv
-├── data/                       BAM files go here (gitignored)
 ├── cfDNA/                      git submodule: shendurelab/cfDNA
 ├── cfDNA_cell_of_origin/       git submodule: JorisVermeeschLab/cfDNA_cell_of_origin
 └── README.md
@@ -85,7 +82,7 @@ pipeline/
 
 ## Input data format
 
-Place BAM files into `data/`. Every `*.bam` file found there
+Pass your BAM file directory as a parameter to snakemake. Every `*.bam` file found there
 is automatically treated as individual sample.
 
 ```text
@@ -105,7 +102,7 @@ gene: Ensembl gene ID, chromosome, start, end, and strand.
 
 Filtered to only include canonical transcripts that also carry a CCDS tag (19,119 genes total)
 
-The `transcriptAnno_GRCh38.body.tsv` contains the same gene annotations but remapped to the first 10kbp from their TSS. These genomic regions are used for the WPS and FFT analysis.  
+The `transcriptAnno_GRCh38.body.tsv` contains the same gene annotations but include an interval of only the first 10kbp from their TSS. These genomic regions are used for the WPS and FFT analysis.  
 
 
 
@@ -125,8 +122,13 @@ macOS and Linux. Tested on macOS (Apple Silicon).
 
 ### Software versions
 
-Only conda and Snakemake 9 or newer need to be installed manually. 
-Snakemake builds every environment it needs (`envs/cfdna.yaml`, `envs/r.yaml`, `envs/python3.yaml`) automatically the first time the pipeline runs.
+- conda and Snakemake 9 or newer
+- R (base only, no extra packages, `Rscript` on PATH)
+- Python 3 on PATH, standard library only
+
+The Python 2.7.15, pysam 0.7.7, bx-python 0.8.9, samtools stack is not
+installed manually. Snakemake builds it automatically from
+`workflow/envs/cfdna.yaml` the first time the pipeline runs.
 ### Hardware
 
 ...
@@ -165,8 +167,18 @@ a sanity check to verify that the pipeline runs fine on your machine.
 ```bash
 #run from /workflow
 
+
+#Linux or Intel Mac
 snakemake --use-conda -c4 -p \
   --config bam_dir=../test_data/bams/ annotation=../test_data/test_annotation.tsv
+
+
+
+#or Apple Silicon
+CONDA_SUBDIR=osx-64 snakemake --use-conda -c4 -p \
+  --config bam_dir=../test_data/bams/ annotation=../test_data/test_annotation.tsv
+
+
 ```
 
 ## Output files

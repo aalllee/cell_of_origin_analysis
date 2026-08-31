@@ -62,8 +62,6 @@ rule fft:
         directory("results/{sample}/proj/{sample}/fft"),
     params:
         script=FFT_SCRIPT,
-    conda:
-        "envs/r.yaml"
     shell:
         """
         mkdir -p {output}
@@ -104,7 +102,5 @@ rule collapse_scores:
         script=COLLAPSE_SCRIPT,
         low=193,
         high=199,
-    conda:
-        "envs/python3.yaml"
     shell:
-        "python {params.script} {input} -o {output} --low {params.low} --high {params.high}"
+        "python3 {params.script} {input} -o {output} --low {params.low} --high {params.high}"
