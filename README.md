@@ -143,7 +143,7 @@ cd pipeline
 ## Running the pipeline
 
 From `workflow/`, runs all 4 rules for every sample found in `bam_dir`.
-`bam_dir` is required, passed via `--config`, no default. `annotation` defaults
+`bam_dir` is required (expects a path to a folder containing sample *.bam files), passed via `--config`, no default. `annotation` defaults
 to the real gene annotation, override it the same way if needed:
 
 **Linux, or Intel Mac:**
@@ -152,10 +152,10 @@ to the real gene annotation, override it the same way if needed:
 #adjust -c arg based on your available cores
 
 #Linux or Intel Mac
-snakemake --use-conda -c4 -p --config bam_dir=../data/
+snakemake --use-conda -c4 -p --config bam_dir=<PATH TO BAM FOLDER>
 
 #Apple Silicon
-CONDA_SUBDIR=osx-64 snakemake --use-conda -c4 -p --config bam_dir=../data/
+CONDA_SUBDIR=osx-64 snakemake --use-conda -c4 -p --config bam_dir=<PATH TO BAM FOLDER>
 
 ```
 
