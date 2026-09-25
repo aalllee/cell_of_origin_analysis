@@ -159,6 +159,15 @@ CONDA_SUBDIR=osx-64 snakemake --use-conda -c4 -p --config bam_dir=<PATH TO BAM F
 
 ```
 
+### Data preprocessing
+
+Trimmed reads were aligned to the human reference genome GRCh38/hg38 using BWA-MEM (v0.7.17)
+
+GENCODE Release 50 (GRCh38.p14) human genome annotations
+wget https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/gencode.v50.primary_assembly.annotation.gtf.gz
+
+
+
 ### Test data
 
 Included a small sample of test data under `test_data/` that might be used as 
@@ -201,6 +210,15 @@ body/                    per-gene WPS
 proj/<sample>/fft/       per-gene FFT 
 proj/fft_summaries/      the 3 collapsed matrices: cov, starts, WPS 
 ```
+## Single cell gene expression 
+https://datasets.cellxgene.cziscience.com/bfd80f12-725c-4482-ad7f-1ed2b4909b0d.h5ad
+
+Call rank diff fixed script:
+
+calldiffrank_fixed.R corr_files.tsv case_control_comparisons.tsv output_dir
+
+## To-do
+Test corellation by limiting the analysis to gene bodies that span at least 60 nucleosome calls.
 
 
 

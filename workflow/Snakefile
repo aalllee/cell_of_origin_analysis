@@ -16,6 +16,12 @@ EXTRACT_SCRIPT = f"../cfDNA/expression/extractReadStartsFromBAM_Region_WPS.py"
 FFT_SCRIPT = f"../cfDNA/expression/fft_path.R"
 CONVERT_SCRIPT = f"../cfDNA/expression/convert_files.py"
 COLLAPSE_SCRIPT = "scripts/collapse_fft_wps.py"
+AVG_EXPR_SCRIPT = "scripts/average_expression_by_celltype_tissue.py"
+CORRELATE_SCRIPT = "scripts/correlate.py"
+
+# tabula_h5ad points at the downloaded Tabula Sapiens h5ad, override via --config
+# snakemake --config bam_dir=<path> tabula_h5ad=<path>
+TABULA_H5AD = config.get("tabula_h5ad", "../data/tabula_sapiens.h5ad")
 
 
 
@@ -27,13 +33,36 @@ SAMPLES, = glob_wildcards(os.path.join(BAM_DIR, "{sample}.bam"))
 #set custom directories, dispatch individual jobs per sample
 rule all:
     input:
-        expand("results/{sample}/gene_scores.tsv", sample=SAMPLES),
+        expand("results/{sample}/correlation.csv", sample=SAMPLES),
 
 
-##
+# flag PCR duplicates (same outer fragment coordinates) before WPS, like Picard in Stanley et al. 2024;
+# the WPS script skips reads *flagged* as duplicates, and input BAMs may carry no flags
+rule mark_duplicates:
+    input:
+        os.path.join(BAM_DIR, "{sample}.bam"),
+    output:
+        bam="results/{sample}/{sample}.markdup.bam",
+        bai="results/{sample}/{sample}.markdup.bam.bai",
+        stats="results/{sample}/{sample}.markdup_stats.txt",
+    threads: 4
+    conda:
+        "envs/cfdna.yaml"
+    shell:
+        """
+        samtools collate -@ {threads} -O -u {input} {output.bam}.collate \
+          | samtools fixmate -@ {threads} -m -u - - \
+          | samtools sort -@ {threads} -u -T {output.bam}.sort - \
+          | samtools markdup -@ {threads} -s -f {output.stats} -T {output.bam}.markdup - {output.bam}
+        samtools index {output.bam}
+        """
+
+
+# the Python 2 scripts are called via $CONDA_PREFIX so an active venv/pyenv python can't shadow the env's python
 rule extract_wps:
     input:
-        bam=os.path.join(BAM_DIR, "{sample}.bam"),
+        bam="results/{sample}/{sample}.markdup.bam",
+        bai="results/{sample}/{sample}.markdup.bam.bai",
         annotation=ANNOTATION,
     output:
         directory("results/{sample}/body"),
@@ -45,9 +74,8 @@ rule extract_wps:
         "envs/cfdna.yaml"
     shell:
         """
-        samtools index {input.bam}
         mkdir -p {output}
-        python {params.script} \
+        "$CONDA_PREFIX/bin/python" {params.script} \
           --minInsert={params.min_insert} --maxInsert={params.max_insert} \
           -i {input.annotation} \
           -o '{output}/block_%s.tsv.gz' \
@@ -84,7 +112,7 @@ rule convert_summary:
     shell:
         """
         mkdir -p results/{wildcards.sample}/proj/fft_summaries
-        python {params.script} \
+        "$CONDA_PREFIX/bin/python" {params.script} \
           -a {input.annotation} \
           -t results/{wildcards.sample} \
           -r results/{wildcards.sample} \
@@ -104,3 +132,26 @@ rule collapse_scores:
         high=199,
     shell:
         "python3 {params.script} {input} -o {output} --low {params.low} --high {params.high}"
+
+
+# built once. reused as input by every correlate job below
+rule build_avg_expression:
+    output:
+        "resources/avg_expr_by_celltype_tissue.csv",
+    params:
+        script=AVG_EXPR_SCRIPT,
+        h5ad=TABULA_H5AD,
+    shell:
+        "python3 {params.script} {params.h5ad} {output}"
+
+
+rule correlate:
+    input:
+        avg_expr="resources/avg_expr_by_celltype_tissue.csv",
+        scores="results/{sample}/gene_scores.tsv",
+    output:
+        "results/{sample}/correlation.csv",
+    params:
+        script=CORRELATE_SCRIPT,
+    shell:
+        "python3 {params.script} {input.avg_expr} {input.scores} -o {output}"
