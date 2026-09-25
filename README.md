@@ -217,10 +217,11 @@ Call rank diff fixed script:
 
 calldiffrank_fixed.R corr_files.tsv case_control_comparisons.tsv output_dir
 
-## To-do
+## Temp
 Test corellation by limiting the analysis to gene bodies that span at least 60 nucleosome calls.
 
 
+other: https://ondemand.snellius.surf.nl
 
 ## Citation
 

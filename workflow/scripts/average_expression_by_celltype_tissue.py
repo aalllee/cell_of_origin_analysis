@@ -30,18 +30,21 @@ def main():
         (adata.obs["assay"] == "10x 3' v3")
         & (~adata.obs["cell_type"].str.contains("sperm", case=False, na=False))
     )
-    adata_filtered = adata[mask, :]
+    # keep row numbers into the original object: newer anndata refuses a view of a backed view,
+    # so every group is read by indexing `adata` once rather than a pre-filtered view
+    kept_rows = np.flatnonzero(np.asarray(mask))
+    obs_filtered = adata.obs[mask]
     print(f"{mask.sum()} / {len(mask)} cells kept after assay/sperm filtering")
 
-    cell_groups = adata_filtered.obs.groupby(
+    cell_groups = obs_filtered.groupby(
         ["cell_type", "tissue_in_publication"], observed=True
     ).indices
     print(f"{len(cell_groups)} (cell_type, tissue) groups found")
 
     result = {}
     for i, ((cell_type, tissue), idx) in enumerate(cell_groups.items(), 1):
-        idx = np.sort(idx)
-        chunk = adata_filtered[idx, :].X  # reads only this group's rows from disk
+        idx = kept_rows[np.sort(idx)]     # group positions -> rows of the full object
+        chunk = adata[idx, :].X  # reads only this group's rows from disk
         mean_expr = (
             np.asarray(chunk.mean(axis=0)).ravel()
             if hasattr(chunk, "toarray")
@@ -52,8 +55,8 @@ def main():
         if i % 50 == 0:
             print(f"[{i}/{len(cell_groups)}] groups done", flush=True)
 
-    avg_expr_df = pd.DataFrame(result, index=adata_filtered.var_names)
-    avg_expr_df.insert(0, "gene_name", adata_filtered.var["feature_name"].values)
+    avg_expr_df = pd.DataFrame(result, index=adata.var_names)
+    avg_expr_df.insert(0, "gene_name", adata.var["feature_name"].values)
     avg_expr_df.to_csv(out_csv)
     print(
         f"Wrote {avg_expr_df.shape[0]} genes x {avg_expr_df.shape[1] - 1} "
