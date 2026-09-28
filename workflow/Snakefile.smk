@@ -10,7 +10,7 @@ if "bam_dir" not in config:
         "  snakemake --use-conda -c4 -p --config bam_dir=<path>"
     )
 BAM_DIR = config["bam_dir"]
-ANNOTATION = config.get("annotation", "../annotation/transcriptAnno_GRCh38.body.tsv")
+ANNOTATION = config.get("annotation", "resources/annotation/transcriptAnno_GRCh38.body.tsv")
 
 EXTRACT_SCRIPT = f"../cfDNA/expression/extractReadStartsFromBAM_Region_WPS.py"
 FFT_SCRIPT = f"../cfDNA/expression/fft_path.R"
