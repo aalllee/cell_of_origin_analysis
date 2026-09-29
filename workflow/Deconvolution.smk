@@ -79,6 +79,8 @@ rule fft:
         sample = "{sample}",
         proj = "Project",
         script=FFT_SCRIPT,
+    conda:
+        "envs/r.yaml"
     shell:
         """
         mkdir -p {output}
@@ -129,6 +131,8 @@ rule collapse_scores:
         script=COLLAPSE_SCRIPT,
         low=193,
         high=199,
+    conda:
+        "envs/python.yaml"
     shell:
         "python3 {params.script} {input} -o {output} --low {params.low} --high {params.high}"
 
@@ -145,6 +149,8 @@ rule build_avg_expression:
         proj = "Project",
         script=AVG_EXPR_SCRIPT,
         h5ad=TABULA_H5AD,
+    conda:
+        "envs/python.yaml"
     shell:
         "python3 {params.script} {params.h5ad} {output}"
 
@@ -162,5 +168,7 @@ rule correlate:
         sample = "{sample}",
         proj = "Project",
         script=CORRELATE_SCRIPT,
+    conda:
+        "envs/python.yaml"
     shell:
         "python3 {params.script} {input.avg_expr} {input.scores} -o {output}"
