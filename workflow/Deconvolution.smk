@@ -47,7 +47,7 @@ rule extract_wps:
         directory("results/{sample}/body"),
     params:
         sample = "{sample}",
-        proj = "Project"
+        proj = "Project",
         script=EXTRACT_SCRIPT,
         min_insert=120,
         max_insert=180,
@@ -71,7 +71,7 @@ rule fft:
         directory("results/{sample}/proj/{sample}/fft"),
     params:
         sample = "{sample}",
-        proj = "Project"
+        proj = "Project",
         script=FFT_SCRIPT,
     shell:
         """
@@ -90,7 +90,7 @@ rule convert_summary:
         starts="results/{sample}/proj/fft_summaries/fft_{sample}_starts.tsv.gz",
     params:
         sample = "{sample}",
-        proj = "Project"
+        proj = "Project",
         script=CONVERT_SCRIPT,
     conda:
         "envs/cfdna.yaml"
@@ -113,7 +113,7 @@ rule collapse_scores:
         "results/{sample}/gene_scores.tsv",
     params:
         sample = "{sample}",
-        proj = "Project"
+        proj = "Project",
         script=COLLAPSE_SCRIPT,
         low=193,
         high=199,
@@ -127,7 +127,7 @@ rule build_avg_expression:
         "resources/avg_expr_by_celltype_tissue.csv",
     params:
         sample = "all",
-        proj = "Project"
+        proj = "Project",
         script=AVG_EXPR_SCRIPT,
         h5ad=TABULA_H5AD,
     shell:
@@ -142,7 +142,7 @@ rule correlate:
         "results/{sample}/correlation.csv",
     params:
         sample = "{sample}",
-        proj = "Project"
+        proj = "Project",
         script=CORRELATE_SCRIPT,
     shell:
         "python3 {params.script} {input.avg_expr} {input.scores} -o {output}"
