@@ -45,6 +45,9 @@ rule extract_wps:
         annotation=ANNOTATION,
     output:
         directory("results/{sample}/body"),
+    threads: 1
+    resources:
+        time=60,
     params:
         sample = "{sample}",
         proj = "Project",
@@ -69,6 +72,9 @@ rule fft:
         "results/{sample}/body",
     output:
         directory("results/{sample}/proj/{sample}/fft"),
+    threads: 1
+    resources:
+        time=60,
     params:
         sample = "{sample}",
         proj = "Project",
@@ -88,6 +94,9 @@ rule convert_summary:
         wps="results/{sample}/proj/fft_summaries/fft_{sample}_WPS.tsv.gz",
         cov="results/{sample}/proj/fft_summaries/fft_{sample}_cov.tsv.gz",
         starts="results/{sample}/proj/fft_summaries/fft_{sample}_starts.tsv.gz",
+    threads: 1
+    resources:
+        time=60,
     params:
         sample = "{sample}",
         proj = "Project",
@@ -111,6 +120,9 @@ rule collapse_scores:
         "results/{sample}/proj/fft_summaries/fft_{sample}_WPS.tsv.gz",
     output:
         "results/{sample}/gene_scores.tsv",
+    threads: 1
+    resources:
+        time=60,
     params:
         sample = "{sample}",
         proj = "Project",
@@ -125,6 +137,9 @@ rule collapse_scores:
 rule build_avg_expression:
     output:
         "resources/avg_expr_by_celltype_tissue.csv",
+    threads: 1
+    resources:
+        time=60,
     params:
         sample = "all",
         proj = "Project",
@@ -140,6 +155,9 @@ rule correlate:
         scores="results/{sample}/gene_scores.tsv",
     output:
         "results/{sample}/correlation.csv",
+    threads: 1
+    resources:
+        time=60,
     params:
         sample = "{sample}",
         proj = "Project",
