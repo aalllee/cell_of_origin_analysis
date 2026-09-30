@@ -19,6 +19,7 @@ Inputs
 Usage
   python generate_s_curves.py ../results/IH02
   python generate_s_curves.py ../results/IH02 -o scurves_IH02 --highlight "classical monocyte_Blood"
+  python generate_s_curves.py ../results/healthy ../results/cancer -o scurves_compare   # + overlay figure
 """
 import argparse
 from pathlib import Path
@@ -72,7 +73,7 @@ def categorise(groups, comp):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("sample_dir", type=Path, help="results/<sample> folder")
+    ap.add_argument("sample_dir", type=Path, nargs="+", help="one or more results/<sample> folders")
     ap.add_argument("-o", "--output", type=Path, help="output directory (default: <sample_dir>/s_curves)")
     ap.add_argument("--ref", type=Path, default=WORKFLOW_DIR / "resources/avg_expr_by_celltype_tissue.csv",
                     help="mean expression per (cell type, tissue) group")
@@ -84,60 +85,81 @@ def main():
                     help="one group drawn in black with markers, like NB-4 in plots.R")
     args = ap.parse_args()
 
-    sample, fft = fft_matrix(args.sample_dir)
-    out_dir = args.output or (args.sample_dir / "s_curves")
-    out_dir.mkdir(parents=True, exist_ok=True)
-
     ref = pd.read_csv(args.ref, index_col=0).drop(columns=["gene_name"], errors="ignore")
     comp = pd.read_csv(args.compartments, index_col=0)["compartment"].reindex(ref.columns)
-    shared = ref.index.intersection(fft.index)
-    print(f"{sample}: {fft.shape[0]} genes x {fft.shape[1]} periods | reference {ref.shape[1]} groups | "
-          f"{len(shared)} shared genes")
+    cat = categorise(ref.columns, comp)
     if args.highlight and args.highlight not in ref.columns:
         raise SystemExit(f"--highlight '{args.highlight}' is not a group in the reference")
 
-    cat = categorise(ref.columns, comp)
-    expr = ref.loc[shared]
-    curves = pd.DataFrame({p: expr.corrwith(fft.loc[shared, p]) for p in fft.columns}).T   # periods x groups
-    curves.index.name = "period_bp"
-    curves.to_csv(out_dir / f"s_curves_{sample}.csv.gz")
+    all_curves = {}
+    for sample_dir in args.sample_dir:
+        sample, fft = fft_matrix(sample_dir)
+        out_dir = args.output or (sample_dir / "s_curves")
+        out_dir.mkdir(parents=True, exist_ok=True)
 
-    periods = curves.index.values
-    in_band = (periods >= args.band[0]) & (periods <= args.band[1])
-    rows = []
-    for k in ["blood/immune", "other"] + CONTROL_CATS:
-        med = curves.loc[:, cat[curves.columns] == k].median(axis=1)
-        rows.append({"category": k, "groups": int((cat == k).sum()), "r at band": med[in_band].mean(),
-                     "min r": med.min(), "period of min r": med.idxmin()})
-    summary = pd.DataFrame(rows).set_index("category")
-    summary.to_csv(out_dir / f"s_curves_summary_{sample}.csv")
-    print(summary.round(3).to_string())
+        shared = ref.index.intersection(fft.index)
+        print(f"\n{sample}: {fft.shape[0]} genes x {fft.shape[1]} periods | {len(shared)} shared with the reference")
+        curves = pd.DataFrame({p: ref.loc[shared].corrwith(fft.loc[shared, p]) for p in fft.columns}).T
+        curves.index.name = "period_bp"
+        curves.to_csv(out_dir / f"s_curves_{sample}.csv.gz")
+        all_curves[sample] = curves
 
-    fig, ax = plt.subplots(figsize=(9, 5.5))
-    ax.axvspan(*args.band, color="gold", alpha=0.3, zorder=0)
-    ax.axhline(0, color="k", lw=0.6)
-    ax.plot(periods, curves.values, color="0.8", lw=0.4, alpha=0.5, zorder=1)          # every group
-    for k in ["blood/immune"] + CONTROL_CATS:
-        med = curves.loc[:, cat[curves.columns] == k].median(axis=1)
-        ax.plot(periods, med, color=CAT_COLORS[k], lw=2.4, zorder=3, label=f"{k} (n={(cat == k).sum()})")
-    med_other = curves.loc[:, cat[curves.columns] == "other"].median(axis=1)
-    ax.plot(periods, med_other, color=CAT_COLORS["other"], lw=1.6, ls=":", zorder=2,
-            label=f"other (n={(cat == 'other').sum()})")
-    if args.highlight:
-        ax.plot(periods, curves[args.highlight], color="k", lw=2, marker="o", ms=3.5, zorder=4,
-                label=args.highlight)
+        periods = curves.index.values
+        in_band = (periods >= args.band[0]) & (periods <= args.band[1])
+        rows = []
+        for k in ["blood/immune", "other"] + CONTROL_CATS:
+            med = curves.loc[:, cat[curves.columns] == k].median(axis=1)
+            rows.append({"category": k, "groups": int((cat == k).sum()), "r at band": med[in_band].mean(),
+                         "min r": med.min(), "period of min r": med.idxmin()})
+        summary = pd.DataFrame(rows).set_index("category")
+        summary.to_csv(out_dir / f"s_curves_summary_{sample}.csv")
+        print(summary.round(3).to_string())
 
-    ax.set_xlabel("period (bp)")
-    ax.set_ylabel("correlation with expression (r)")
-    ax.set_title(f"{sample}: correlation of FFT-WPS intensity with expression, per period\n"
-                 f"thin grey = each of the {len(cat)} (cell type, tissue) groups, bold = category median",
-                 fontsize=11)
-    ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1), frameon=False)
-    plt.tight_layout(rect=(0, 0, 0.82, 1))
-    png = out_dir / f"s_curves_{sample}.png"
-    fig.savefig(png, dpi=150, bbox_inches="tight")
-    print(f"\nwrote {png}\n      {out_dir / f's_curves_{sample}.csv.gz'} (periods x groups)\n"
-          f"      {out_dir / f's_curves_summary_{sample}.csv'}")
+        fig, ax = plt.subplots(figsize=(9, 5.5))
+        ax.axvspan(*args.band, color="gold", alpha=0.3, zorder=0)
+        ax.axhline(0, color="k", lw=0.6)
+        ax.plot(periods, curves.values, color="0.8", lw=0.4, alpha=0.5, zorder=1)
+        for k in ["blood/immune"] + CONTROL_CATS:
+            med = curves.loc[:, cat[curves.columns] == k].median(axis=1)
+            ax.plot(periods, med, color=CAT_COLORS[k], lw=2.4, zorder=3, label=f"{k} (n={(cat == k).sum()})")
+        ax.plot(periods, curves.loc[:, cat[curves.columns] == "other"].median(axis=1), color=CAT_COLORS["other"],
+                lw=1.6, ls=":", zorder=2, label=f"other (n={(cat == 'other').sum()})")
+        if args.highlight:
+            ax.plot(periods, curves[args.highlight], color="k", lw=2, marker="o", ms=3.5, zorder=4,
+                    label=args.highlight)
+        ax.set_xlabel("period (bp)"); ax.set_ylabel("correlation with expression (r)")
+        ax.set_title(f"{sample}: correlation of FFT-WPS intensity with expression, per period\n"
+                     f"thin grey = each of the {len(cat)} (cell type, tissue) groups, bold = category median",
+                     fontsize=11)
+        ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1), frameon=False)
+        plt.tight_layout(rect=(0, 0, 0.82, 1))
+        fig.savefig(out_dir / f"s_curves_{sample}.png", dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"wrote {out_dir / f's_curves_{sample}.png'}")
+
+    # with several samples: one overlay of the category medians, line style per sample
+    if len(all_curves) > 1:
+        out_dir = args.output or args.sample_dir[0].parent
+        out_dir.mkdir(parents=True, exist_ok=True)
+        styles = ["-", "--", ":", "-."]
+        fig, ax = plt.subplots(figsize=(9, 5.5))
+        ax.axvspan(*args.band, color="gold", alpha=0.3, zorder=0)
+        ax.axhline(0, color="k", lw=0.6)
+        for (sample, curves), ls in zip(all_curves.items(), styles):
+            for k in ["blood/immune", "other"] + CONTROL_CATS:
+                med = curves.loc[:, cat[curves.columns] == k].median(axis=1)
+                ax.plot(curves.index.values, med, color=CAT_COLORS[k], lw=2.2, ls=ls, alpha=0.9)
+        handles = ([Line2D([], [], color=CAT_COLORS[k], lw=2.2, label=k)
+                    for k in ["blood/immune", "other"] + CONTROL_CATS]
+                   + [Line2D([], [], color="k", lw=2.2, ls=ls, label=s)
+                      for s, ls in zip(all_curves, styles)])
+        ax.legend(handles=handles, fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1), frameon=False)
+        ax.set_xlabel("period (bp)"); ax.set_ylabel("median correlation with expression (r)")
+        ax.set_title("Category medians, " + " vs ".join(all_curves), fontsize=12)
+        plt.tight_layout(rect=(0, 0, 0.82, 1))
+        png = out_dir / ("s_curves_compare_" + "_".join(all_curves) + ".png")
+        fig.savefig(png, dpi=150, bbox_inches="tight")
+        print(f"\nwrote {png}")
 
 
 if __name__ == "__main__":
