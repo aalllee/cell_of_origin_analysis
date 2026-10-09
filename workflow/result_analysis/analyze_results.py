@@ -456,6 +456,52 @@ def fig_tissue_order(res, tissue, out, title):
     plt.close(fig)
 
 
+def _box(ax, vals, pos, width, color, horizontal=False):
+    "one box; matplotlib >= 3.11 wants orientation=, older versions want vert="
+    kw = dict(positions=[pos], widths=width, patch_artist=True, showfliers=False)
+    try:
+        bp = ax.boxplot(vals, orientation="horizontal" if horizontal else "vertical", **kw)
+    except TypeError:
+        bp = ax.boxplot(vals, vert=not horizontal, **kw)
+    bp["boxes"][0].set(facecolor=color, alpha=.45, edgecolor=color)
+    bp["medians"][0].set(color=color, lw=2)
+    for w in bp["whiskers"] + bp["caps"]:
+        w.set(color=color, alpha=.8)
+    return bp
+
+
+def fig_paired_boxes(res, keys, members, out, title, ylab, horizontal=False, figsize=(16, 5.5)):
+    """one box per sample per key, side by side. Uses RANK, not r: correlations are not
+    comparable between samples of different depth, ranks are."""
+    ranks = {s: r.rank() for s, r in res.items()}
+    rng = np.random.default_rng(0)
+    n = len(res)
+    fig, ax = plt.subplots(figsize=figsize)
+    for i, k in enumerate(keys):
+        groups = members(k)
+        for j, s in enumerate(res):
+            pos = i + (j - (n - 1) / 2) * .38
+            vals = ranks[s][groups]
+            _box(ax, vals, pos, .34, SAMPLE_COLORS[j], horizontal)
+            jit = rng.normal(pos, .05, len(vals))
+            xy = (vals.values, jit) if horizontal else (jit, vals.values)
+            ax.scatter(*xy, s=7, color=SAMPLE_COLORS[j], alpha=.55, zorder=3)
+    ticks = [f"{k.replace('_', ' ')} ({len(members(k))})" for k in keys]
+    n_groups = len(list(res.values())[0])
+    if horizontal:
+        ax.set_yticks(range(len(keys))); ax.set_yticklabels(ticks, fontsize=9)
+        ax.invert_yaxis(); ax.set_xlabel(ylab)
+    else:
+        ax.set_xticks(range(len(keys)))
+        ax.set_xticklabels(ticks, rotation=45, ha="right", fontsize=9)
+        ax.invert_yaxis(); ax.set_ylabel(ylab)
+    ax.set_title(title)
+    ax.legend(handles=[Patch(color=SAMPLE_COLORS[j], alpha=.6, label=s) for j, s in enumerate(res)],
+              fontsize=9, loc="upper left", bbox_to_anchor=(1.01, 1))
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+
+
 def fig_spread_compare(res, lab, out, title):
     fig, axes = plt.subplots(1, len(res), figsize=(4.6 * len(res), 4.6), sharey=True, squeeze=False)
     for ax, (s, r) in zip(axes[0], res.items()):
@@ -494,6 +540,8 @@ def main():
                     help="do not read results/<sample>/body (faster; no coverage section)")
     ap.add_argument("--max-zero-frac", type=float, default=0.95,
                     help="drop genes whose window is more than this fraction empty (default 0.95)")
+    ap.add_argument("--top-celltypes", type=int, default=25,
+                    help="cell types shown in the paired comparison figure (default 25)")
     ap.add_argument("--compare", nargs=2, metavar=("A", "B"), default=None,
                     help="sample pair for the comparison figures (default: first two given)")
     args = ap.parse_args()
@@ -595,6 +643,26 @@ def main():
         fig_rank_shift(sub, celltype, comp, cat, out / "rank_shift.png", title)
         fig_tissue_order(sub, tissue, out / "tissue_order.png", title)
         fig_spread_compare(res, lab, out / "spread_compare.png", f"Correlation spread by label {title}")
+
+        nmax = len(list(sub.values())[0])
+        rank_pair = {s: r.rank() for s, r in sub.items()}
+        tis_order = (tissue.groupby(tissue)
+                     .apply(lambda t: np.mean([rank_pair[s][t.index].median() for s in sub]))
+                     .sort_values().index.tolist())
+        fig_paired_boxes(sub, tis_order, lambda k: list(tissue.index[tissue == k]),
+                         out / "by_tissue_compare.png",
+                         f"Rank by tissue, {pair[0]} vs {pair[1]} {title}",
+                         f"rank (1 = strongest, {nmax} = weakest)")
+
+        ct_med = (celltype.groupby(celltype)
+                  .apply(lambda t: np.mean([rank_pair[s][t.index].median() for s in sub]))
+                  .sort_values())
+        ct_order = ct_med.index[:args.top_celltypes].tolist()
+        fig_paired_boxes(sub, ct_order, lambda k: list(celltype.index[celltype == k]),
+                         out / "by_celltype_compare.png",
+                         f"Rank by cell type, strongest {len(ct_order)}, {pair[0]} vs {pair[1]} {title}",
+                         f"rank (1 = strongest, {nmax} = weakest)",
+                         horizontal=True, figsize=(10, .32 * len(ct_order) + 2))
         print(f"\ncomparison [{mode}]: {pair[0]} vs {pair[1]} -> {out}")
 
     print(f"\n{args.output / 'summary.csv'}")
