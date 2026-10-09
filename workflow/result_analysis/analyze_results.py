@@ -470,7 +470,7 @@ def _box(ax, vals, pos, width, color, horizontal=False):
     return bp
 
 
-def fig_paired_boxes(res, keys, members, out, title, ylab, horizontal=False, figsize=(16, 5.5)):
+def fig_paired_boxes(res, keys, members, cat, out, title, ylab, horizontal=False, figsize=(16, 5.5)):
     """one box per sample per key, side by side. Uses RANK, not r: correlations are not
     comparable between samples of different depth, ranks are."""
     ranks = {s: r.rank() for s, r in res.items()}
@@ -485,7 +485,15 @@ def fig_paired_boxes(res, keys, members, out, title, ylab, horizontal=False, fig
             _box(ax, vals, pos, .34, SAMPLE_COLORS[j], horizontal)
             jit = rng.normal(pos, .05, len(vals))
             xy = (vals.values, jit) if horizontal else (jit, vals.values)
-            ax.scatter(*xy, s=7, color=SAMPLE_COLORS[j], alpha=.55, zorder=3)
+            cats = np.array([cat[g] for g in groups])
+            is_ctrl = np.isin(cats, list(CAT_MARKERS))
+            ax.scatter(*(np.asarray(a)[~is_ctrl] for a in xy), s=7,
+                       color=SAMPLE_COLORS[j], alpha=.55, zorder=3)
+            for ck, mk in CAT_MARKERS.items():      # controls: shape = class, fill = sample
+                sel = cats == ck
+                if sel.any():
+                    ax.scatter(*(np.asarray(a)[sel] for a in xy), s=55, marker=mk,
+                               color=SAMPLE_COLORS[j], edgecolors="white", linewidths=.7, zorder=6)
     ticks = [f"{k.replace('_', ' ')} ({len(members(k))})" for k in keys]
     n_groups = len(list(res.values())[0])
     if horizontal:
@@ -496,8 +504,13 @@ def fig_paired_boxes(res, keys, members, out, title, ylab, horizontal=False, fig
         ax.set_xticklabels(ticks, rotation=45, ha="right", fontsize=9)
         ax.invert_yaxis(); ax.set_ylabel(ylab)
     ax.set_title(title)
-    ax.legend(handles=[Patch(color=SAMPLE_COLORS[j], alpha=.6, label=s) for j, s in enumerate(res)],
-              fontsize=9, loc="upper left", bbox_to_anchor=(1.01, 1))
+    leg1 = ax.legend(handles=[Patch(color=SAMPLE_COLORS[j], alpha=.6, label=s)
+                              for j, s in enumerate(res)],
+                     fontsize=9, loc="upper left", bbox_to_anchor=(1.01, 1), title="sample")
+    ax.add_artist(leg1)
+    ax.legend(handles=[Line2D([], [], marker=m, ls="", color="0.35", markeredgecolor="white",
+                              markersize=8, label=k) for k, m in CAT_MARKERS.items()],
+              fontsize=8.5, loc="upper left", bbox_to_anchor=(1.01, .78), title="negative controls")
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
 
@@ -649,7 +662,7 @@ def main():
         tis_order = (tissue.groupby(tissue)
                      .apply(lambda t: np.mean([rank_pair[s][t.index].median() for s in sub]))
                      .sort_values().index.tolist())
-        fig_paired_boxes(sub, tis_order, lambda k: list(tissue.index[tissue == k]),
+        fig_paired_boxes(sub, tis_order, lambda k: list(tissue.index[tissue == k]), cat,
                          out / "by_tissue_compare.png",
                          f"Rank by tissue, {pair[0]} vs {pair[1]} {title}",
                          f"rank (1 = strongest, {nmax} = weakest)")
@@ -658,7 +671,7 @@ def main():
                   .apply(lambda t: np.mean([rank_pair[s][t.index].median() for s in sub]))
                   .sort_values())
         ct_order = ct_med.index[:args.top_celltypes].tolist()
-        fig_paired_boxes(sub, ct_order, lambda k: list(celltype.index[celltype == k]),
+        fig_paired_boxes(sub, ct_order, lambda k: list(celltype.index[celltype == k]), cat,
                          out / "by_celltype_compare.png",
                          f"Rank by cell type, strongest {len(ct_order)}, {pair[0]} vs {pair[1]} {title}",
                          f"rank (1 = strongest, {nmax} = weakest)",
