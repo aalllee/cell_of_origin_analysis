@@ -3,25 +3,32 @@ import sys
 
 # bam_dir is required, passed via --config, e.g.:
 # snakemake --config bam_dir="BAM DATA PATH"
-# annotation defaults to the real gene annotation, override the same way if needed
+# annotation and expression default to the Ensembl canonical GRCh38 pair below,
+# override either the same way if needed, e.g. for a GRCh37 sample:
+#   --config bam_dir=<path> annotation=resources/annotation/transcriptAnno-GRCh37.75.body.tsv
 if "bam_dir" not in config:
     sys.exit(
         "ERROR: bam_dir is required. Run with:\n"
         "  snakemake --use-conda -c4 -p --config bam_dir=<path>"
     )
 BAM_DIR = config["bam_dir"]
-ANNOTATION = config.get("annotation", "resources/annotation/transcriptAnno_GRCh38.body.tsv")
+
+# the annotation and the expression reference are a matched pair: all 19,620 genes of
+# geneExpression_Stanley.tsv are present in Ensemble_canonical_GRCh38.body.tsv. The older
+# transcriptAnno_GRCh38.body.tsv misses 588 of them, so do not mix the two generations.
+ANNOTATION = config.get("annotation", "resources/annotation/Ensemble_canonical_GRCh38.body.tsv")
+EXPRESSION = config.get("expression", "resources/geneExpression_Stanley.tsv")
+
+# geneExpression_Stanley.tsv holds per-cell-type proportions (every column sums to 1), a
+# linear abundance, so it is logged before correlating. Set expr_transform=none for a
+# reference that is already on a log scale, such as avg_expr_by_celltype_tissue.csv.
+EXPR_TRANSFORM = config.get("expr_transform", "log")
 
 EXTRACT_SCRIPT = f"../cfDNA/expression/extractReadStartsFromBAM_Region_WPS.py"
 FFT_SCRIPT = f"../cfDNA/expression/fft_path.R"
 CONVERT_SCRIPT = f"../cfDNA/expression/convert_files.py"
 COLLAPSE_SCRIPT = "scripts/collapse_fft_wps.py"
-AVG_EXPR_SCRIPT = "scripts/average_expression_by_celltype_tissue.py"
 CORRELATE_SCRIPT = "scripts/correlate.py"
-
-# tabula_h5ad points at the downloaded Tabula Sapiens h5ad, override via --config
-# snakemake --config bam_dir=<path> tabula_h5ad=<path>
-TABULA_H5AD = config.get("tabula_h5ad", "../data/tabula_sapiens.h5ad")
 
 
 
@@ -47,7 +54,7 @@ rule extract_wps:
         directory("results/{sample}/body"),
     threads: 1
     resources:
-        time=60,
+        time=180,
     params:
         sample = "{sample}",
         proj = "Project",
@@ -74,7 +81,7 @@ rule fft:
         directory("results/{sample}/proj/{sample}/fft"),
     threads: 1
     resources:
-        time=60,
+        time=180,
     params:
         sample = "{sample}",
         proj = "Project",
@@ -137,27 +144,11 @@ rule collapse_scores:
         "python3 {params.script} {input} -o {output} --low {params.low} --high {params.high}"
 
 
-# built once. reused as input by every correlate job below
-rule build_avg_expression:
-    output:
-        "resources/avg_expr_by_celltype_tissue.csv",
-    threads: 1
-    resources:
-        time=60,
-    params:
-        sample = "all",
-        proj = "Project",
-        script=AVG_EXPR_SCRIPT,
-        h5ad=TABULA_H5AD,
-    conda:
-        "envs/python.yaml"
-    shell:
-        "python3 {params.script} {params.h5ad} {output}"
-
-
+# EXPRESSION is a shipped file, not a built one: the old build_avg_expression rule derived
+# resources/avg_expr_by_celltype_tissue.csv from the Tabula Sapiens h5ad and is gone with it.
 rule correlate:
     input:
-        avg_expr="resources/avg_expr_by_celltype_tissue.csv",
+        avg_expr=EXPRESSION,
         scores="results/{sample}/gene_scores.tsv",
     output:
         "results/{sample}/correlation.csv",
@@ -168,7 +159,9 @@ rule correlate:
         sample = "{sample}",
         proj = "Project",
         script=CORRELATE_SCRIPT,
+        transform=EXPR_TRANSFORM,
     conda:
         "envs/python.yaml"
     shell:
         "python3 {params.script} {input.avg_expr} {input.scores} -o {output}"
+        " --transform {params.transform}"
